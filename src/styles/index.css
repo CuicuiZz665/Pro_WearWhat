@@ -1,0 +1,31 @@
+/* ===== 主题：温柔米杏 ===== */
+:root {
+  /* Vant 主题变量（覆盖默认蓝） */
+  --van-primary-color: #a97c5f;    /* 焦糖奶茶色：按钮、选中态 */
+  --van-text-color: #3e2f23;       /* 深咖啡：正文 */
+  --van-background: #f7f2ea;       /* 米杏：页面背景 */
+  --van-background-2: #fffdf8;     /* 奶白：卡片、弹层 */
+  --van-nav-bar-background: #f7f2ea;
+  --van-nav-bar-title-text-color: #3e2f23;
+  --van-tabbar-background: #fffdf8;
+  --van-tabbar-item-active-color: #a97c5f;
+}
+
+/* 全局基础样式：所有页面共享 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f7f2ea;
+  color: #3e2f23;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 页面容器：给底部导航栏留出空间，避免内容被遮住 */
+.page {
+  min-height: 100vh;
+  padding-bottom: 66px;
+}
