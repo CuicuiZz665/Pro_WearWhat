@@ -8,7 +8,7 @@
 - 面向手机 H5 的个人 AI 衣柜与穿搭助手，产品名**「穿什么」**
 - 核心闭环：拍照识别单品 → 生成白底商品图 → 管理衣柜 → 穿搭推荐（远期：AI 试穿）
 - 当前阶段：**本地内测**，不部署公网；后续计划 Cloudflare Pages（前端）+ Supabase（数据）免费方案
-- 项目根目录：`/Users/cuiweikang/Documents/Pro_WearWhat`
+- 项目根目录：`/Users/cuiweikang/Desktop/Office Me/Pro_WearWhat`（唯一正式目录。注意：`Documents/Pro_WearWhat` 是同名空目录，非本项目，勿混淆）
 
 ## 二、环境与常用命令
 
@@ -22,7 +22,7 @@
 - Vue3 + Vite（vue 模板，JS 非 TS）
 - UI 组件库：**Vant 4**，已配按需自动引入（unplugin-vue-components + @vant/auto-import-resolver），模板里直接写 `<van-xxx>` 即可，无需手动 import
 - 路由：vue-router 4，**hash 模式**（部署到任何静态托管都不 404，勿改 history 模式）
-- 数据：Pinia 已安装未使用，衣柜数据将存 `src/stores/`
+- 数据：Pinia **已在使用**——`stores/wardrobe.js`（衣柜）、`stores/outfits.js`（收藏穿搭）、`stores/profile.js`（偏好），均经 localStorage 持久化（key 前缀 `wearwhat_`）
 
 ## 四、目录结构与职责
 
@@ -52,18 +52,19 @@ src/
 | 协作规则 | **产品层决定**（页面/颜色/文案/功能取舍）出选项让用户拍板；**技术层默认**可自行决定但说明理由 |
 | 命名 | 产品名"穿什么"，npm 包名 `pro-wearwhat`，文件夹 `Pro_WearWhat` |
 
-## 六、单品数据字段（草案，衣柜页开发时落地到 stores）
+## 六、单品数据字段（已随衣柜页落地到 `stores/wardrobe.js`，以代码为准）
 
 `id / 类目(上装·下装·鞋·包·配饰) / 细分类目 / 主色 / 材质 / 图案 / 风格标签 / 适合季节 / 适合场合 / 原图URL / 白底图URL / 用户标签 / 穿着频次 / 添加时间`
 
 ## 七、开发路线图
 
-1. **衣柜页（进行中，下一任务）**：本地版——选图/拍照上传 + 单品卡片九宫格 + 分类筛选，数据暂存 localStorage（经 Pinia）
-2. AI 识别：多模态大模型识图输出结构化属性 → `api/garment.js`
-3. 白底图：本地部署 rembg 抠图 → `api/matting.js`
-4. 首页：天气 API + 规则版推荐
-5. 我的页：偏好设置
-6. 部署：Cloudflare Pages（`chuanshenme` 项目名）+ Supabase
+1. **衣柜页（已完成 v0.1.0，v0.2.0 增强）**：选图/拍照上传 + 单品卡片九宫格 + 分类筛选 + 编辑/详情，数据存 localStorage（经 Pinia）
+2. **AI 识别（已完成 v0.1.0，v0.2.0 增强）**：智谱 GLM-4V 识图输出结构化属性（含材质判断依据、待确认状态）→ `api/garment.js`
+3. 白底图：本地部署 rembg 抠图 → `api/matting.js`（未开工）
+4. **首页（已完成 v0.1.0）**：天气 API（IP 定位 + open-meteo）+ 本地规则推荐 + 收藏穿搭
+5. **我的页（已完成 v0.1.0）**：偏好设置
+6. 部署：Cloudflare Pages（`chuanshenme` 项目名）+ Supabase（未开工；AI 识别代理需另行方案）
+7. **AI 识别质量评测（暂定 v0.3.0，未开工）**
 
 ## 八、多窗口协作规则（重要）
 
