@@ -59,6 +59,73 @@
       </button>
     </div>
 
+    <!-- 材质（AI 推测）：状态由程序维护，AI 结果一律待确认；用户确认/修改后才变已确认 -->
+    <div class="field-label">
+      材质
+      <span
+        v-if="material"
+        class="status-pill"
+        :class="materialStatus === 'confirmed' ? 'status-pill--ok' : 'status-pill--pending'"
+      >{{ materialStatus === 'confirmed' ? '已确认' : '待确认' }}</span>
+    </div>
+    <div class="material-row">
+      <button
+        type="button"
+        class="chip"
+        :class="{ 'chip--on': showMaterialEditor }"
+        @click="showMaterialEditor = !showMaterialEditor"
+      >
+        {{ material || '未识别，点此填写' }}
+      </button>
+      <button
+        v-if="material && materialStatus !== 'confirmed'"
+        type="button"
+        class="chip chip--confirm"
+        @click="confirmMaterial"
+      >
+        ✓ 确认
+      </button>
+    </div>
+    <!-- AI 判断依据：默认只显示一行，点「依据」展开全文 -->
+    <div v-if="materialReason" class="material-reason">
+      <span class="material-reason__tag" @click="reasonExpanded = !reasonExpanded">依据</span>
+      <span class="material-reason__text" :class="{ 'material-reason__text--full': reasonExpanded }">{{ materialReason }}</span>
+    </div>
+    <!-- 材质修改面板：选常用词 / 自定义 / 未知，选完即视为已确认 -->
+    <div v-if="showMaterialEditor" class="material-editor">
+      <div class="chip-row">
+        <button
+          v-for="m in MATERIAL_OPTIONS"
+          :key="m"
+          type="button"
+          class="chip"
+          :class="{ 'chip--on': material === m }"
+          @click="pickMaterial(m)"
+        >
+          {{ m }}
+        </button>
+        <button
+          type="button"
+          class="chip"
+          :class="{ 'chip--on': material === '未知' }"
+          @click="pickMaterial('未知')"
+        >
+          未知
+        </button>
+      </div>
+      <div class="material-editor__custom">
+        <van-field
+          v-model="customMaterial"
+          class="name-field"
+          placeholder="其他材质，手动输入"
+          maxlength="12"
+          @keyup.enter="submitCustomMaterial"
+        />
+        <van-button size="small" round class="material-editor__btn" @click="submitCustomMaterial">填入</van-button>
+      </div>
+      <div class="material-editor__tip">选择或输入后即视为已确认；不处理也可直接保存（保持待确认）</div>
+    </div>
+
     <!-- 备注（可选） -->
     <div class="field-label">备注（可选）</div>
     <van-field
@@ -68,8 +135,9 @@
       maxlength="12"
     />
 
+    <!-- 识别中禁止保存：避免识别返回前表单还挂着旧照片属性（或空值）就被存进去；失败后按钮恢复，手动填完照样能存 -->
     <div class="form-sheet__footer">
-      <van-button round block type="primary" :loading="saving" @click="onSave">保存</van-button>
+      <van-button round block type="primary" :loading="saving" :disabled="recognizing" @click="onSave">保存</van-button>
     </div>
 
     <!-- 拍照 or 相册 -->
@@ -131,10 +199,20 @@ const name = ref('')
 // AI 识别的扩展属性：暂无手动输入入口，识别后随保存写入（见 autoRecognize / onSave）
 const subCategory = ref('')
 const material = ref('')
+const materialReason = ref('')
+// 材质确认状态，只由程序根据用户操作维护：pending 待确认 / confirmed 用户已确认。
+// AI 识别结果一律置 pending，AI 永远无权声称已确认。
+const materialStatus = ref('pending')
 const pattern = ref('')
 const seasons = ref([])
 const occasions = ref([])
 const saving = ref(false)
+
+// 材质确认区：常用材质候选（织法/成分混排，与现有 material 字段的取词习惯一致）
+const MATERIAL_OPTIONS = ['棉', '羊毛', '羊绒', '真丝', '亚麻', '牛仔', '皮革', '针织', '雪纺', '涤纶', '腈纶']
+const showMaterialEditor = ref(false)
+const customMaterial = ref('')
+const reasonExpanded = ref(false)
 
 const showPicker = ref(false)
 const cameraInput = ref(null)
@@ -143,7 +221,7 @@ const albumInput = ref(null)
 // AI 自动识别状态；用户手动选过的字段不被识别结果覆盖
 const recognizing = ref(false)
 const recognizeHint = ref('')
-const userTouched = ref({ category: false, mainColor: false })
+const userTouched = ref({ category: false, mainColor: false, material: false })
 let recognizeSeq = 0 // 换照片会让旧识别结果作废，避免乱填
 
 // 重复检测：照片指纹比对（同一张照片）+ 属性软匹配（很像的同款）
@@ -170,12 +248,18 @@ watch(
     // 编辑模式带入已有扩展字段，保存时不至于被空值覆盖丢失
     subCategory.value = props.garment?.subCategory || ''
     material.value = props.garment?.material || ''
+    materialReason.value = props.garment?.materialReason || ''
+    // 旧数据没有 materialStatus：只在内存里按待确认展示，不写回 localStorage
+    materialStatus.value = props.garment?.materialStatus || 'pending'
     pattern.value = props.garment?.pattern || ''
     seasons.value = Array.isArray(props.garment?.seasons) ? props.garment.seasons : []
     occasions.value = Array.isArray(props.garment?.occasions) ? props.garment.occasions : []
     recognizing.value = false
     recognizeHint.value = ''
-    userTouched.value = { category: false, mainColor: false }
+    userTouched.value = { category: false, mainColor: false, material: false }
+    showMaterialEditor.value = false
+    customMaterial.value = ''
+    reasonExpanded.value = false
     // 重复检测状态复位；编辑模式带入旧照片的指纹（换照片会重算）
     photoHash.value = props.garment?.imageHash || ''
     dupGuard.value = false
@@ -211,11 +295,34 @@ function isLightColor(value) {
   return ['#f5f5f0', '#e8dcc8', '#e6c84f', '#f2b8c6'].includes(value)
 }
 
+// 换照片/删照片：旧照片对应的一切识别属性全部作废，等新照片重新识别。
+// 否则照片 B 会沿用照片 A 的名称/类目/材质等结论，确认状态也是对着旧照片确认的，不能再算数。
+function resetForNewPhoto() {
+  category.value = ''
+  mainColor.value = ''
+  name.value = ''
+  subCategory.value = ''
+  pattern.value = ''
+  seasons.value = []
+  occasions.value = []
+  material.value = ''
+  materialReason.value = ''
+  materialStatus.value = 'pending'
+  // 照片换了，用户在旧照片上的手动修改一并作废，新识别结果才写得进来
+  userTouched.value = { category: false, mainColor: false, material: false }
+  showMaterialEditor.value = false
+  customMaterial.value = ''
+  reasonExpanded.value = false
+}
+
 function onPickerSelect(action) {
   showPicker.value = false
   if (action.name === '拍照') cameraInput.value?.click()
   else if (action.name === '从相册选择') albumInput.value?.click()
-  else if (action.name === '删除照片') photo.value = ''
+  else if (action.name === '删除照片') {
+    photo.value = ''
+    resetForNewPhoto()
+  }
 }
 
 async function onFileChosen(e) {
@@ -225,6 +332,7 @@ async function onFileChosen(e) {
   saving.value = true
   try {
     photo.value = await compressImage(file)
+    resetForNewPhoto() // 新照片的识别属性必须重新识别，不能带着旧照片的结论
     autoRecognize()
     checkPhotoDuplicate()
   } catch {
@@ -258,17 +366,48 @@ async function checkPhotoDuplicate() {
   }
 }
 
-// 名字像不像：完全相等 / 一方包含另一方 / 有 2 字以上重合（如"红衬衫"vs"红色衬衫"）
+// 名称是 AI 按模板生成的「颜色+材质/款式+品类」，颜色信息已由 mainColor 字段单独承载，
+// 比较相似度前只剥掉开头的颜色前缀（含深/浅修饰，如"深蓝色"），
+// 不删名称中间的颜色单字，避免误删有意义的文字
+const COLOR_WORDS = [...COLOR_OPTIONS.map((c) => c.label), '深', '浅']
+
+function stripColorPrefix(name) {
+  let s = name
+  let stripped = true
+  while (stripped) {
+    stripped = false
+    for (const w of COLOR_WORDS) {
+      if (s.startsWith(w)) {
+        s = s.slice(w.length)
+        stripped = true
+        break
+      }
+    }
+  }
+  return s.trim()
+}
+
+// 名字像不像：剥掉颜色前缀后，完全相等 / 一方包含另一方 / 有 2 字以上重合（如"红衬衫"vs"红色衬衫"）
 function namesAlike(a, b) {
   if (!a || !b) return false
-  if (a === b || a.includes(b) || b.includes(a)) return true
-  for (let i = 0; i + 2 <= a.length; i++) {
-    if (b.includes(a.slice(i, i + 2))) return true
+  const sa = stripColorPrefix(a)
+  const sb = stripColorPrefix(b)
+  if (!sa || !sb) return false // 剥完只剩颜色词，没有区分度
+  if (sa === sb || sa.includes(sb) || sb.includes(sa)) return true
+  for (let i = 0; i + 2 <= sa.length; i++) {
+    if (sb.includes(sa.slice(i, i + 2))) return true
   }
   return false
 }
 
-// 不同照片但很像的同款：类目 + 主色 + 名称都对得上时提示
+// 细分类目像不像：相等或一方包含另一方都算同类（"衬衫"和"长袖衬衫"不算不同款）；
+// 双方都有且互不包含（如"衬衫"vs"毛衣"）才算明确不同的款
+function subCategoriesMatch(a, b) {
+  if (!a || !b) return true // 一方缺失时不以此排除，交给名称判断
+  return a === b || a.includes(b) || b.includes(a)
+}
+
+// 不同照片但很像的同款：类目 + 主色 + 细分类目 + 名称都对得上时才提示
 function checkLookalike(r) {
   if (dupGuard.value || !r.category || !r.mainColor || !r.name) return
   const hit = store.items.find((item) => {
@@ -276,18 +415,43 @@ function checkLookalike(r) {
     return (
       item.category === r.category &&
       item.mainColor === r.mainColor &&
+      subCategoriesMatch(item.subCategory, r.subCategory) &&
       namesAlike(item.name, r.name)
     )
   })
   if (hit) {
     dupGuard.value = true
-    dupMessage.value = `衣柜里已有一件很像的「${hit.name}」（类目、颜色、名称都相近），可能是同一件衣服。要继续添加吗？`
+    dupMessage.value = `衣柜里有一件可能相似的「${hit.name}」（类目、颜色、款式都相近），不一定是同一件衣服。若不是，可以选择继续添加。`
     showDupDialog.value = true
   }
 }
 
 function closeForm() {
   emit('update:show', false)
+}
+
+// 用户表态「AI 猜得对」：值不变，只翻确认状态（状态只能由用户操作触发）
+function confirmMaterial() {
+  if (!material.value) return
+  materialStatus.value = 'confirmed'
+}
+
+// 用户改材质：改完即视为已确认；AI 的旧依据不再适用，换成用户填写说明；
+// 并标记 userTouched，防止这张照片迟到的识别结果覆盖用户输入
+function pickMaterial(value) {
+  material.value = value
+  materialReason.value = '用户手动填写'
+  materialStatus.value = 'confirmed'
+  userTouched.value.material = true
+  showMaterialEditor.value = false
+  reasonExpanded.value = false
+}
+
+function submitCustomMaterial() {
+  const v = customMaterial.value.trim()
+  if (!v) return
+  pickMaterial(v.slice(0, 12))
+  customMaterial.value = ''
 }
 
 // 选完照片自动识别：类目、主色自动选好，名称给个建议；失败不拦着，手动填就行
@@ -304,7 +468,13 @@ async function autoRecognize() {
     // 扩展字段直接采用识别结果（AI 漏返回时兜底为空值，不影响保存）；
     // 写入前已通过 seq 校验，换照片后旧结果不会串进来
     subCategory.value = r.subCategory || ''
-    material.value = r.material || ''
+    // 材质三件套随识别结果写入并重置为待确认；
+    // 但用户在这张照片上手动改过材质时不覆盖（迟到的识别结果不能盖掉用户输入）
+    if (!userTouched.value.material) {
+      material.value = r.material || ''
+      materialReason.value = r.materialReason || ''
+      materialStatus.value = 'pending' // AI 结果一律待确认，已确认只能来自用户操作
+    }
     pattern.value = r.pattern || ''
     seasons.value = Array.isArray(r.seasons) ? r.seasons : []
     occasions.value = Array.isArray(r.occasions) ? r.occasions : []
@@ -338,6 +508,9 @@ function onSave() {
     // AI 识别的扩展属性（编辑时由 watch 从旧数据带回，不会因保存而丢失）
     subCategory: subCategory.value,
     material: material.value,
+    materialReason: materialReason.value,
+    // 确认状态随表单落盘；用户没处理过就保持 pending，不影响保存
+    materialStatus: materialStatus.value || 'pending',
     pattern: pattern.value,
     seasons: seasons.value,
     occasions: occasions.value,
@@ -483,6 +656,96 @@ function onSave() {
 .name-field {
   border-radius: 8px;
   background: #f7f2ea;
+}
+
+/* 材质确认区 */
+.status-pill {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  vertical-align: 1px;
+}
+
+.status-pill--pending {
+  color: #b06e2c;
+  background: rgba(242, 140, 40, 0.14);
+}
+
+.status-pill--ok {
+  color: #4c7a3d;
+  background: rgba(106, 153, 78, 0.14);
+}
+
+.material-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip--confirm {
+  border-color: #6a994e;
+  color: #4c7a3d;
+  background: rgba(106, 153, 78, 0.08);
+}
+
+.material-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: rgba(62, 47, 35, 0.6);
+}
+
+.material-reason__tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #a97c5f;
+  background: rgba(169, 124, 95, 0.1);
+  cursor: pointer;
+}
+
+.material-reason__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1; /* 默认一行，点「依据」展开全文 */
+  overflow: hidden;
+}
+
+.material-reason__text--full {
+  -webkit-line-clamp: unset;
+}
+
+.material-editor {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(169, 124, 95, 0.06);
+}
+
+.material-editor__custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.material-editor__custom .name-field {
+  flex: 1;
+}
+
+.material-editor__btn {
+  flex-shrink: 0;
+  color: #a97c5f;
+  border-color: #a97c5f;
+}
+
+.material-editor__tip {
+  margin-top: 8px;
+  font-size: 10px;
+  color: rgba(62, 47, 35, 0.5);
 }
 
 .form-sheet__footer {

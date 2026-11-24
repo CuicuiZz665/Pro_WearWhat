@@ -73,6 +73,8 @@ export const useWardrobeStore = defineStore('wardrobe', {
         // 以下字段等 AI 识别（api/garment.js）接入后由模型填充，本地版留空
         subCategory: '',
         material: '',
+        materialReason: '',
+        materialStatus: 'pending', // 确认状态只由程序维护；旧数据缺省时读处按待确认展示，不自动写回
         pattern: '',
         styleTags: [],
         seasons: [],

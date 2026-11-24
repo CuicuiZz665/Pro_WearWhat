@@ -8,7 +8,7 @@ const API_URL = '/api/zhipu/api/paas/v4/chat/completions'
 
 // 让模型只能从我们的选项里挑，返回后才能稳定映射成程序用的值
 const PROMPT = `你是衣物识别助手。看这张衣物照片，只输出一个 JSON 对象，不要输出任何其他文字：
-{"category":"类目，必须严格是[上装,下装,鞋,包,配饰]这五个词之一，禁止写"上衣"等其他说法","subCategory":"细分类目，如：T恤、衬衫、针织开衫、牛仔裤、半身裙、运动鞋、双肩包、帽子","mainColor":"从[黑,白,灰,米,焦糖,棕,红,粉,橙,黄,绿,蓝,紫,多色]中选最接近的主色","pattern":"图案：纯色/条纹/格子/印花/撞色/其他","material":"猜测材质，如：棉、牛仔、皮革、针织、雪纺","seasons":["适合季节，从[春,夏,秋,冬]多选"],"occasions":["适合场合，从[通勤,休闲,运动,约会,正式]多选"],"name":"8字以内的中文名称，如：白色纯棉T恤"}
+{"category":"类目，必须严格是[上装,下装,鞋,包,配饰]这五个词之一，禁止写「上衣」等其他说法","subCategory":"细分类目，如：T恤、衬衫、针织开衫、牛仔裤、半身裙、运动鞋、双肩包、帽子","mainColor":"从[黑,白,灰,米,焦糖,棕,红,粉,橙,黄,绿,蓝,紫,多色]中选最接近的主色","pattern":"图案：纯色/条纹/格子/印花/撞色/其他","material":"材质，只写一个词。织法/面料外观能直接看出的（牛仔、皮革、针织、雪纺等）可给结论；真实纤维成分（棉、羊毛、羊绒、真丝、涤纶等）照片无法确认，只能按款式给最可能的一种；实在判断不出就写「未知」，不要强行猜测","materialReason":"材质判断依据，一句话：说明哪些是照片里直接看到的（纹理/光泽/垂感），纤维成分若是推测要写明推测依据；material 为「未知」时说明为什么看不出","seasons":["适合季节，从[春,夏,秋,冬]多选"],"occasions":["适合场合，从[通勤,休闲,运动,约会,正式]多选"],"name":"8字以内的中文名称，如：白色纯棉T恤"}
 如果照片里没有人穿的衣物、包或配饰，category 填"配饰"并在 name 里说明看不出是什么。`
 
 // 模型偶尔不守规矩输出同义词（如"上衣"），做个别名兜底
@@ -52,6 +52,8 @@ function mapResult(raw) {
     mainColor: mapColor(raw.mainColor),
     pattern: raw.pattern || '',
     material: raw.material || '',
+    materialReason: raw.materialReason || '', // AI 判断依据；漏返回时兜底为空
+    // 注意：不读 raw.materialStatus —— 确认状态只能由程序根据用户操作维护，AI 无权设置
     seasons: Array.isArray(raw.seasons) ? raw.seasons : [],
     occasions: Array.isArray(raw.occasions) ? raw.occasions : [],
     name: (raw.name || '').slice(0, 12),
