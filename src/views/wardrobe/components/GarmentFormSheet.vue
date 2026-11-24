@@ -128,6 +128,12 @@ const photo = ref('')
 const category = ref('')
 const mainColor = ref('')
 const name = ref('')
+// AI 识别的扩展属性：暂无手动输入入口，识别后随保存写入（见 autoRecognize / onSave）
+const subCategory = ref('')
+const material = ref('')
+const pattern = ref('')
+const seasons = ref([])
+const occasions = ref([])
 const saving = ref(false)
 
 const showPicker = ref(false)
@@ -161,6 +167,12 @@ watch(
     category.value = props.garment?.category || props.defaultCategory || ''
     mainColor.value = props.garment?.mainColor || ''
     name.value = props.garment?.name || ''
+    // 编辑模式带入已有扩展字段，保存时不至于被空值覆盖丢失
+    subCategory.value = props.garment?.subCategory || ''
+    material.value = props.garment?.material || ''
+    pattern.value = props.garment?.pattern || ''
+    seasons.value = Array.isArray(props.garment?.seasons) ? props.garment.seasons : []
+    occasions.value = Array.isArray(props.garment?.occasions) ? props.garment.occasions : []
     recognizing.value = false
     recognizeHint.value = ''
     userTouched.value = { category: false, mainColor: false }
@@ -289,6 +301,13 @@ async function autoRecognize() {
     if (r.category && !userTouched.value.category) category.value = r.category
     if (r.mainColor && !userTouched.value.mainColor) mainColor.value = r.mainColor
     if (r.name && !name.value.trim()) name.value = r.name
+    // 扩展字段直接采用识别结果（AI 漏返回时兜底为空值，不影响保存）；
+    // 写入前已通过 seq 校验，换照片后旧结果不会串进来
+    subCategory.value = r.subCategory || ''
+    material.value = r.material || ''
+    pattern.value = r.pattern || ''
+    seasons.value = Array.isArray(r.seasons) ? r.seasons : []
+    occasions.value = Array.isArray(r.occasions) ? r.occasions : []
     recognizeHint.value = r.category
       ? '已自动识别，可手动修改'
       : 'AI 没认出类目，手动选一下更稳妥'
@@ -316,6 +335,12 @@ function onSave() {
     category: category.value,
     mainColor: mainColor.value,
     name: name.value.trim(),
+    // AI 识别的扩展属性（编辑时由 watch 从旧数据带回，不会因保存而丢失）
+    subCategory: subCategory.value,
+    material: material.value,
+    pattern: pattern.value,
+    seasons: seasons.value,
+    occasions: occasions.value,
   }
   const ok = isEdit.value ? store.update(props.garment.id, data) : store.add(data)
   if (!ok) {
